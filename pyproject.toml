@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "vexa-robot-panel"
+version = "0.1.0"
+description = "VEXA Control Panel and Agent Integration for MiniRobot"
+authors = ["Anak10thn <anak10thn@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+fastapi = "^0.110.0"
+uvicorn = "^0.27.0"
+pydantic = "^2.6.0"
+bleak = "^0.21.0"
+websockets = "^12.0"
+pyaudio = "^0.2.14"
+opencv-python = "^4.9.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

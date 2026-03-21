@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXA Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        nexa: {
+                            bg: '#0a0a0a',
+                            panel: '#141414',
+                            border: '#2a2a2a',
+                            textPrimary: '#ffffff',
+                            textSecondary: '#8a8a8a',
+                            accent: '#4ade80'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', '"Space Mono"', 'monospace', 'ui-monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style type="text/tailwindcss">
+        body {
+            background-color: #0a0a0a !important;
+            color: #ffffff !important;
+            font-family: 'JetBrains Mono', 'Space Mono', monospace;
+        }
+        
+        .panel {
+            background-color: #141414 !important;
+            border: 1px solid #2a2a2a !important;
+            position: relative;
+        }
+
+        /* Sci-fi corners */
+        .panel::before, .panel::after,
+        .panel-inner::before, .panel-inner::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-color: #555;
+            border-style: solid;
+        }
+        .panel::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+        .panel::after { top: 0; right: 0; border-width: 1px 1px 0 0; }
+        .panel-inner::before { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
+        .panel-inner::after { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Joystick styles */
+        .joystick-container {
+            touch-action: none;
+            border-radius: 50%;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+        .joystick-knob {
+            width: 40px;
+            height: 40px;
+            background: #4ade80;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+            transition: box-shadow 0.2s;
+        }
+        .joystick-knob:active {
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.8);
+        }
+
+        .btn-sci {
+            background: transparent;
+            border: 1px solid #444;
+            color: #aaa;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+        }
+        .btn-sci:hover {
+            border-color: #fff;
+            color: #fff;
+            background: rgba(255,255,255,0.05);
+        }
+        .btn-sci:active {
+            background: rgba(255,255,255,0.1);
+        }
+        .blinking-dot {
+            animation: blink 2s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col p-4 gap-4 selection:bg-nexa-accent selection:text-black">
+
+<!-- HEADER -->
+<header class="flex justify-between items-end pb-2 border-b border-nexa-border">
+    <div class="flex items-center gap-4">
+        <h1 class="text-2xl font-bold tracking-widest uppercase">NEXA</h1>
+        <div class="h-4 w-px bg-nexa-border"></div>
+        <div class="text-xs text-nexa-textSecondary" id="connStatus">
+            <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-2 blinking-dot" id="statusDot"></span>
+            SYSTEM DISCONNECTED
+        </div>
+    </div>
+    
+    <div class="flex gap-8 text-xs text-nexa-textSecondary text-right">
+        <div>
+            <div class="uppercase mb-1 tracking-wider text-[10px]">Unit ID</div>
+            <div class="text-nexa-textPrimary font-bold" id="unitId">M-NEXA 09</div>
+        </div>
+        <div>
+            <div class="uppercase mb-1 tracking-wider text-[10px]">Uptime</div>
+            <div class="text-nexa-textPrimary font-bold" id="uptimeCounter">0:00:00</div>
+        </div>
+        <div>
+            <div class="uppercase mb-1 tracking-wider text-[10px]">Power Level</div>
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-nexa-textPrimary" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                </svg>
+                <span class="text-nexa-textPrimary font-bold" id="topBattery">--%</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="btn-sci p-1 px-2" onclick="scanDevices()">SCAN</button>
+            <button class="btn-sci p-1 px-2" id="btnConnect" onclick="connectDevice()">CONNECT</button>
+        </div>
+    </div>
+</header>
+
+<!-- MAIN GRID -->
+<div class="flex-1 grid grid-cols-12 grid-rows-2 gap-4 min-h-0">
+    
+    <!-- LEFT PANEL: Deep Scan / Media -->
+    <div class="col-span-5 row-span-2 panel flex flex-col p-4 relative">
+        <div class="panel-inner absolute inset-0 pointer-events-none"></div>
+        
+        <div class="relative flex-1 bg-[#050505] border border-[#222] mb-4 overflow-hidden rounded group">
+            <!-- Simulated Camera Feed / Radar -->
+            <div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80')] bg-cover bg-center opacity-60 mix-blend-luminosity"></div>
+            
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent pointer-events-none"></div>
+            
+            <!-- Scan lines overlay -->
+            <div class="absolute inset-0 pointer-events-none" style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px);"></div>
+            
+            <!-- Reticle -->
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-white/20 rounded-full flex items-center justify-center">
+                <div class="w-1 h-4 bg-white/40 absolute top-0"></div>
+                <div class="w-1 h-4 bg-white/40 absolute bottom-0"></div>
+                <div class="w-4 h-1 bg-white/40 absolute left-0"></div>
+                <div class="w-4 h-1 bg-white/40 absolute right-0"></div>
+                <div class="w-2 h-2 bg-red-500/80 rounded-full"></div>
+            </div>
+            
+            <div class="absolute top-4 right-4 text-xs font-mono text-white/70 tracking-widest">
+                REC <span class="text-red-500 blink block inline-block w-2 h-2 rounded-full ml-1 blinking-dot"></span>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-end block mb-2">
+            <h2 class="text-lg tracking-wider">Deep Scan Sequence</h2>
+            <div class="text-[10px] bg-[#222] px-2 py-1 flex items-center gap-2">
+                <div class="w-1.5 h-1.5 bg-nexa-textSecondary rounded-full"></div>
+                Rock-Jezero-09
+            </div>
+        </div>
+        
+        <div class="mb-2 flex items-baseline gap-2">
+            <span class="text-3xl font-light tracking-tight" id="batteryPercentBig">--.-</span>
+            <span class="text-[10px] text-nexa-textSecondary tracking-widest uppercase">% Power Remaining</span>
+        </div>
+        
+        <div class="h-6 w-full flex gap-1 mb-1" id="energyBars">
+            <!-- Bars generated via JS -->
+        </div>
+        
+        <div class="flex justify-between text-[10px] text-nexa-textSecondary uppercase tracking-widest">
+            <span><span id="batRaw" class="text-white">--</span> Raw Voltage</span>
+            <span><span class="text-white">Stable</span> System</span>
+        </div>
+    </div>
+
+    <!-- RIGHT TOP: Environmental Trends -->
+    <div class="col-span-7 row-span-1 panel p-4 flex flex-col relative">
+        <div class="panel-inner absolute inset-0 pointer-events-none"></div>
+        
+        <div class="flex justify-between items-start mb-4">
+            <h2 class="text-lg tracking-wider">24H Power Trends</h2>
+            <button class="btn-sci p-1 w-6 h-6 flex justify-center items-center" onclick="fetchBatteryHistory()">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex justify-between items-center mb-6 pr-8">
+            <div class="flex items-start">
+                <span class="text-5xl font-light tracking-tighter" id="trendVoltage">--.-</span>
+                <span class="text-sm mt-1 ml-1 text-nexa-textSecondary">V</span>
+            </div>
+            
+            <div class="flex gap-8 text-xs">
+                <div>
+                    <div class="text-nexa-textPrimary text-lg" id="trendMaxV">--.- v</div>
+                    <div class="text-nexa-textSecondary text-[10px] uppercase tracking-widest">Max Voltage</div>
+                </div>
+                <div>
+                    <div class="text-nexa-textPrimary text-lg" id="trendMinV">--.- v</div>
+                    <div class="text-nexa-textSecondary text-[10px] uppercase tracking-widest">Min Voltage</div>
+                </div>
+                <div>
+                    <div class="text-nexa-textPrimary text-lg" id="trendReadings">--</div>
+                    <div class="text-nexa-textSecondary text-[10px] uppercase tracking-widest">Data Points</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex-1 w-full relative">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- RIGHT BOTTOM LEFT: Material Analysis (Logs) -->
+    <div class="col-span-4 row-span-1 panel p-4 flex flex-col relative">
+        <div class="panel-inner absolute inset-0 pointer-events-none"></div>
+        
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-sm tracking-wider uppercase">System Logs</h2>
+            <button class="btn-sci p-1 w-6 h-6 flex justify-center items-center text-[10px]" onclick="fetchLogs()">...</button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto scrollbar-hide space-y-3 pr-2" id="logContainer">
+            <div class="text-sm text-nexa-textSecondary text-center mt-10">No logs generated yet.</div>
+        </div>
+    </div>
+
+    <!-- RIGHT BOTTOM RIGHT: Multispectral Array (Control) -->
+    <div class="col-span-3 row-span-1 panel p-4 flex flex-col relative">
+        <div class="panel-inner absolute inset-0 pointer-events-none"></div>
+        
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-sm tracking-wider uppercase">Vector Control</h2>
+            <button class="btn-sci p-1 w-6 h-6 flex justify-center items-center">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 flex flex-col items-center justify-center relative">
+            
+            <div class="flex items-center gap-3 mb-6">
+                <!-- Power setting -->
+                <div class="text-xs text-nexa-textSecondary uppercase tracking-widest">Thrust</div>
+                <input type="range" id="powerSlider" min="2000" max="20000" value="9000" class="w-24 accent-nexa-textPrimary h-1 bg-gray-800 outline-none">
+            </div>
+
+            <div class="joystick-container w-32 h-32" id="joystickArea">
+                <div id="joystickKnob" class="joystick-knob"></div>
+            </div>
+            
+            <div class="mt-4 flex gap-4 text-[10px] text-nexa-textSecondary uppercase font-mono">
+                <span>X: <span id="joyX" class="text-white">0</span></span>
+                <span>Y: <span id="joyY" class="text-white">0</span></span>
+            </div>
+        </div>
+        
+    </div>
+
+</div>
+
+<!-- Overlays & Modals could go here -->
+<!-- Hidden Address Input -->
+<input type="hidden" id="inputAddress" value="">
+
+<script>
+    const API_URL = '';
+    let isConnected = false;
+    let joystickActive = false;
+    let joyX = 0, joyY = 0;
+    let chartInstance = null;
+    let uptimeSeconds = 0;
+    let logPollInterval = null;
+
+    // --- Chart Init ---
+    function initChart() {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        
+        // Custom plugin to draw vertical line on hover
+        const verticalLinePlugin = {
+            id: 'verticalLine',
+            beforeDraw: chart => {
+                if (chart.tooltip._active && chart.tooltip._active.length) {
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    const activePoint = chart.tooltip._active[0];
+                    ctx.beginPath();
+                    ctx.moveTo(activePoint.element.x, chart.chartArea.top);
+                    ctx.lineTo(activePoint.element.x, chart.chartArea.bottom);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        };
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Voltage',
+                    data: [],
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointBackgroundColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index',
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#111',
+                        titleColor: '#8a8a8a',
+                        bodyColor: '#fff',
+                        borderColor: '#333',
+                        borderWidth: 1,
+                        displayColors: false,
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y.toFixed(1)} V`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        ticks: { color: '#555', font: { family: 'monospace', size: 10 } }
+                    },
+                    y: {
+                        grid: { color: '#222', drawBorder: false },
+                        ticks: { color: '#555', font: { family: 'monospace', size: 10 } }
+                    }
+                }
+            },
+            plugins: [verticalLinePlugin]
+        });
+    }
+
+    // --- Uptime Timer ---
+    setInterval(() => {
+        uptimeSeconds++;
+        const h = Math.floor(uptimeSeconds / 3600);
+        const m = Math.floor((uptimeSeconds % 3600) / 60);
+        const s = uptimeSeconds % 60;
+        document.getElementById('uptimeCounter').innerText = 
+            `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }, 1000);
+
+    // --- API & Core Functions ---
+    async function api(endpoint, method = 'GET', body = null) {
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) options.body = JSON.stringify(body);
+        const response = await fetch(API_URL + '/api' + endpoint, options);
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Request failed');
+        }
+        return response.json();
+    }
+
+    function updateConnUI(connected, name = '', address = '') {
+        isConnected = connected;
+        const statusDot = document.getElementById('statusDot');
+        const connStatus = document.getElementById('connStatus');
+        const btnConnect = document.getElementById('btnConnect');
+        const unitId = document.getElementById('unitId');
+        
+        if (connected) {
+            statusDot.classList.replace('bg-red-500', 'bg-nexa-accent');
+            connStatus.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-nexa-accent mr-2 blinking-dot" id="statusDot"></span>LINK ESTABLISHED`;
+            btnConnect.textContent = 'DISCONNECT';
+            btnConnect.onclick = disconnectDevice;
+            unitId.textContent = name || 'NEXA-UNKNOWN';
+            
+            // Start battery polling & logs
+            startPoller();
+            fetchBatteryHistory();
+        } else {
+            statusDot.classList.replace('bg-nexa-accent', 'bg-red-500');
+            connStatus.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-2 blinking-dot" id="statusDot"></span>SYSTEM DISCONNECTED`;
+            btnConnect.textContent = 'CONNECT';
+            btnConnect.onclick = connectDevice;
+            unitId.textContent = 'STANDBY';
+            stopPoller();
+        }
+    }
+
+    async function scanDevices() {
+        try {
+            const result = await api('/scan?timeout=5');
+            if (result.devices.length > 0) {
+                // Auto-fill first for simplicity in control panel
+                document.getElementById('inputAddress').value = result.devices[0].address;
+                fetchLogs(); // refresh logs
+            }
+        } catch (e) { console.error('Scan err:', e); }
+    }
+
+    async function connectDevice() {
+        const addr = document.getElementById('inputAddress').value.trim();
+        try {
+            const body = addr ? { address: addr } : {};
+            const res = await api('/connect', 'POST', body);
+            updateConnUI(true, res.name, res.address);
+        } catch(e) { console.error('Connect failed:', e); fetchLogs(); }
+    }
+
+    async function disconnectDevice() {
+        try {
+            await api('/disconnect', 'POST');
+            updateConnUI(false);
+        } catch(e) { console.error('Disconnect failed:', e); }
+    }
+
+    // --- Battery & Logs Polling ---
+    let poller = null;
+    function startPoller() {
+        if (poller) return;
+        poller = setInterval(() => {
+            if (isConnected) {
+                api('/battery').then(res => {
+                    updateBatteryUI(res.battery_percent, res.voltage, res.raw_deci_volt);
+                    fetchBatteryHistory();
+                }).catch(e => console.error(e));
+                fetchLogs();
+            }
+        }, 10000); // 10s interval
+        api('/battery').then(res => updateBatteryUI(res.battery_percent, res.voltage, res.raw_deci_volt));
+        fetchLogs();
+    }
+    
+    function stopPoller() {
+        if(poller) clearInterval(poller);
+        poller = null;
+    }
+
+    function updateBatteryUI(percent, voltage, raw) {
+        document.getElementById('topBattery').textContent = `${percent}%`;
+        document.getElementById('batteryPercentBig').textContent = `${percent.toFixed(1)}`;
+        document.getElementById('trendVoltage').textContent = `${voltage.toFixed(1)}`;
+        document.getElementById('batRaw').textContent = raw;
+        
+        // Update energy bars (50 bars max)
+        const barsContainer = document.getElementById('energyBars');
+        barsContainer.innerHTML = '';
+        const filled = Math.floor((percent / 100) * 40);
+        for(let i=0; i<40; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'flex-1 h-full ' + (i < filled ? 'bg-white' : 'bg-[#333]');
+            barsContainer.appendChild(bar);
+        }
+    }
+
+    async function fetchBatteryHistory() {
+        try {
+            const res = await api('/battery_history?limit=24');
+            const data = res.history;
+            if(data.length === 0) return;
+            
+            const labels = [];
+            const volts = [];
+            let min = 100, max = 0;
+            
+            data.forEach(row => {
+                const t = new Date(row.timestamp);
+                labels.push(`${t.getHours()}:${t.getMinutes().toString().padStart(2,'0')}`);
+                volts.push(row.voltage);
+                if(row.voltage < min) min = row.voltage;
+                if(row.voltage > max) max = row.voltage;
+            });
+
+            chartInstance.data.labels = labels;
+            chartInstance.data.datasets[0].data = volts;
+            chartInstance.update();
+            
+            document.getElementById('trendMinV').textContent = `${min.toFixed(1)} v`;
+            document.getElementById('trendMaxV').textContent = `${max.toFixed(1)} v`;
+            document.getElementById('trendReadings').textContent = data.length;
+
+        } catch(e) { console.error('Fetch battery hx err:', e); }
+    }
+
+    function getLevelColor(lvl) {
+        switch(lvl) {
+            case 'ERROR': return 'text-red-500';
+            case 'SUCCESS': return 'text-nexa-accent';
+            case 'WARN': return 'text-yellow-500';
+            case 'CMD': return 'text-blue-400';
+            default: return 'text-nexa-textSecondary';
+        }
+    }
+
+    async function fetchLogs() {
+        try {
+            const res = await api('/logs?limit=15');
+            const container = document.getElementById('logContainer');
+            container.innerHTML = '';
+            
+            res.logs.forEach(log => {
+                const timeStr = log.timestamp.split(' ')[1].substring(0, 5); // Just HH:MM
+                const div = document.createElement('div');
+                div.className = 'flex items-start gap-3 border-b border-[#222] pb-2 text-[11px]';
+                
+                div.innerHTML = `
+                    <div class="w-8 shrink-0 relative overflow-hidden rounded bg-[#222]">
+                        <img src="https://images.unsplash.com/photo-1541888079-67d1db0a4dcf?w=50&q=80" 
+                             class="w-8 h-8 object-cover mix-blend-luminosity opacity-50 grayscale" alt="">
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-baseline mb-1">
+                            <span class="font-bold uppercase tracking-wider ${getLevelColor(log.level)} text-xs">${log.component}</span>
+                            <span class="text-nexa-textSecondary tracking-widest">${log.level}</span>
+                        </div>
+                        <div class="text-nexa-textPrimary">${log.message}</div>
+                    </div>
+                    <div class="text-nexa-textSecondary text-right shrink-0 mt-1">${timeStr}</div>
+                `;
+                container.appendChild(div);
+            });
+        } catch(e) { console.error('Fetch logs err:', e); }
+    }
+
+    // --- Joystick Logic ---
+    const joystickArea = document.getElementById('joystickArea');
+    const joystickKnob = document.getElementById('joystickKnob');
+    let joyTimer = null;
+
+    function getJoystickPos(e, rect) {
+        let cx, cy;
+        if(e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+        else { cx = e.clientX; cy = e.clientY; }
+        
+        const x = cx - rect.left - rect.width / 2;
+        const y = cy - rect.top - rect.height / 2;
+        const maxDist = rect.width / 2 - 20; // knob radius
+        
+        const dist = Math.min(Math.sqrt(x*x + y*y), maxDist);
+        const angle = Math.atan2(y, x);
+        
+        return {
+            x: Math.round((Math.cos(angle) * dist / maxDist) * 32767),
+            y: Math.round((Math.sin(angle) * dist / maxDist) * -32767), // invert Y for standard mapping
+            percX: Math.cos(angle) * dist,
+            percY: Math.sin(angle) * dist
+        };
+    }
+
+    function handleJoyMove(e) {
+        if(!joystickActive) return;
+        e.preventDefault();
+        const rect = joystickArea.getBoundingClientRect();
+        const pos = getJoystickPos(e, rect);
+        
+        joyX = pos.x; joyY = pos.y;
+        document.getElementById('joyX').textContent = joyX;
+        document.getElementById('joyY').textContent = joyY;
+        
+        joystickKnob.style.left = `calc(50% + ${pos.percX}px)`;
+        joystickKnob.style.top = `calc(50% + ${pos.percY}px)`;
+    }
+
+    function startSendingJoy() {
+        if(joyTimer) return;
+        joyTimer = setInterval(() => {
+            if(isConnected && (joyX !== 0 || joyY !== 0)) {
+                // Invert Y back for the robot API payload requirements
+                api('/joystick', 'POST', { x: joyX, y: -joyY, duration: 0.5 }).catch(()=>{});
+            }
+        }, 150);
+    }
+
+    function stopSendingJoy() {
+        if(joyTimer) { clearInterval(joyTimer); joyTimer = null; }
+        joyX = 0; joyY = 0;
+        document.getElementById('joyX').textContent = '0';
+        document.getElementById('joyY').textContent = '0';
+        joystickKnob.style.left = '50%';
+        joystickKnob.style.top = '50%';
+        if(isConnected) {
+            api('/move', 'POST', { action: 'stop' }).catch(()=>{});
+        }
+    }
+
+    joystickArea.addEventListener('mousedown', e => { joystickActive = true; handleJoyMove(e); startSendingJoy(); });
+    joystickArea.addEventListener('touchstart', e => { joystickActive = true; handleJoyMove(e); startSendingJoy(); });
+    document.addEventListener('mousemove', handleJoyMove);
+    document.addEventListener('touchmove', handleJoyMove);
+    document.addEventListener('mouseup', () => { if(joystickActive) { joystickActive = false; stopSendingJoy(); } });
+    document.addEventListener('touchend', () => { if(joystickActive) { joystickActive = false; stopSendingJoy(); } });
+
+    // Initialize
+    initChart();
+    // Render energy bars empty initially
+    updateBatteryUI(0, 0, 0);
+
+</script>
+</body>
+</html>
