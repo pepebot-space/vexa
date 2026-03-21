@@ -399,6 +399,11 @@
         try {
             const res = await api('/connect', 'POST', { address: addr });
             updateConnUI(true, res.name, res.address);
+            
+            // Auto-connect voice agent outputting to this Bluetooth speaker name
+            if (!isVoiceActive) {
+                await toggleVoiceAgent(res.name);
+            }
         } catch(e) { console.error('Connect failed:', e); fetchLogs(); }
     }
 
@@ -406,14 +411,22 @@
         try {
             await api('/disconnect', 'POST');
             updateConnUI(false);
+            if (isVoiceActive) await toggleVoiceAgent(); // Auto-disconnect agent
         } catch(e) { console.error('Disconnect failed:', e); }
     }
     
     // --- Voice Agent Controls ---
-    async function toggleVoiceAgent() {
+    async function toggleVoiceAgent(forceSpeakerName = null) {
         try {
             if (!isVoiceActive) {
-                await api('/agent/start', 'POST');
+                let speaker = forceSpeakerName;
+                if (!speaker && isConnected) {
+                    const uiName = document.getElementById('unitId').textContent;
+                    if (uiName !== 'STANDBY' && uiName !== 'VEXA-UNKNOWN') speaker = uiName;
+                }
+                const payload = speaker ? { speaker_name: speaker } : null;
+                
+                await api('/agent/start', 'POST', payload);
                 isVoiceActive = true;
                 document.getElementById('agentStatusText').textContent = 'VOICE: ACTIVE';
                 document.getElementById('voiceToggleBtn').classList.add('bg-vexa-accent', 'text-black', 'border-vexa-accent');

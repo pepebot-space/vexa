@@ -349,11 +349,15 @@ async def video_feed():
     return StreamingResponse(video_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
+class AgentStartRequest(BaseModel):
+    speaker_name: Optional[str] = None
+
 @app.post("/api/agent/start")
-async def api_start_agent():
-    agent_core.start_agent()
-    await asyncio.to_thread(database.add_log, "INFO", "Agent", "Voice/Video Agent starting...")
-    return JSONResponse(content={"status": "starting"})
+async def api_start_agent(req: Optional[AgentStartRequest] = None):
+    speaker_name = req.speaker_name if req else None
+    agent_core.start_agent(target_speaker_name=speaker_name)
+    await asyncio.to_thread(database.add_log, "INFO", "Agent", f"Voice/Video Agent starting... (Speaker: {speaker_name or 'Default'})")
+    return JSONResponse(content={"status": "starting", "speaker": speaker_name})
 
 
 @app.post("/api/agent/stop")

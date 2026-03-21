@@ -99,7 +99,7 @@ stop_event = None
 latest_frame = None
 agent_status = "idle"
 
-async def start_agent_loop():
+async def start_agent_loop(target_speaker_name: Optional[str] = None):
     global latest_frame, agent_status
     agent_status = "starting"
     
@@ -108,7 +108,51 @@ async def start_agent_loop():
     bot_speaking_until = 0.0
     video_enabled = False
 
-    stream_out = p.open(format=FORMAT, channels=CHANNELS, rate=OUTPUT_RATE, output=True, frames_per_buffer=OUTPUT_CHUNK)
+    output_device_index = None
+    if target_speaker_name:
+        # First pass: try to match the exact BLE device name
+        for i in range(p.get_device_count()):
+            info = p.get_device_info_by_index(i)
+            if info.get("maxOutputChannels", 0) > 0 and info.get("name"):
+                if target_speaker_name.lower() in info["name"].lower():
+                    output_device_index = i
+                    print(f"Matched BLE Speaker: {info['name']}")
+                    break
+                    
+        # Second pass: macOS often just names Bluetooth audio sinks "Bluetooth"
+        if output_device_index is None:
+            for i in range(p.get_device_count()):
+                info = p.get_device_info_by_index(i)
+                if info.get("maxOutputChannels", 0) > 0 and info.get("name"):
+                    if "bluetooth" in info["name"].lower():
+                        output_device_index = i
+                        print(f"Fallback matched Generic Bluetooth Speaker: {info['name']}")
+                        break
+
+    actual_out_rate = OUTPUT_RATE
+    actual_out_channels = CHANNELS
+    
+    try:
+        stream_out = p.open(format=FORMAT, channels=CHANNELS, rate=OUTPUT_RATE, output=True, frames_per_buffer=OUTPUT_CHUNK, output_device_index=output_device_index)
+    except Exception as e:
+        print(f"Could not open device {output_device_index} at 24kHz Mono: {e}")
+        if output_device_index is not None:
+            try:
+                info = p.get_device_info_by_index(output_device_index)
+                actual_out_rate = int(info.get("defaultSampleRate", 44100))
+                actual_out_channels = int(info.get("maxOutputChannels", 2))
+                if actual_out_channels < 1: actual_out_channels = 2
+                stream_out = p.open(format=FORMAT, channels=actual_out_channels, rate=actual_out_rate, output=True, frames_per_buffer=OUTPUT_CHUNK, output_device_index=output_device_index)
+                print(f"Fallback success: {actual_out_rate}Hz, {actual_out_channels}Ch")
+            except Exception as e2:
+                print(f"Fallback to native settings failed: {e2}")
+                output_device_index = None
+                actual_out_rate = OUTPUT_RATE
+                actual_out_channels = CHANNELS
+                stream_out = p.open(format=FORMAT, channels=CHANNELS, rate=OUTPUT_RATE, output=True, frames_per_buffer=OUTPUT_CHUNK, output_device_index=None)
+        else:
+            stream_out = p.open(format=FORMAT, channels=CHANNELS, rate=OUTPUT_RATE, output=True, frames_per_buffer=OUTPUT_CHUNK, output_device_index=None)
+
     stream_in = p.open(format=FORMAT, channels=CHANNELS, rate=INPUT_RATE, input=True, frames_per_buffer=INPUT_CHUNK)
     noise_gate = NoiseGate()
 
@@ -126,6 +170,8 @@ async def start_agent_loop():
         prebuffer_target = OUTPUT_PREBUFFER_CHUNKS * bytes_per_out_chunk
         pending = bytearray()
         started = False
+        resample_state = None
+        
         while not stop_event.is_set():
             try:
                 pcm = await asyncio.wait_for(output_queue.get(), timeout=0.02)
@@ -141,8 +187,15 @@ async def start_agent_loop():
             else:
                 frame = bytes(pending) + (b"\x00" * (bytes_per_out_chunk - len(pending)))
                 pending.clear()
+                
+            final_frame = frame
+            if actual_out_rate != OUTPUT_RATE:
+                final_frame, resample_state = audioop.ratecv(final_frame, SAMPLE_WIDTH, CHANNELS, OUTPUT_RATE, actual_out_rate, resample_state)
+            if actual_out_channels == 2 and CHANNELS == 1:
+                final_frame = audioop.tostereo(final_frame, SAMPLE_WIDTH, 1, 1)
+                
             try:
-                await asyncio.to_thread(stream_out.write, frame)
+                await asyncio.to_thread(stream_out.write, final_frame)
             except Exception:
                 return
 
@@ -262,12 +315,12 @@ async def start_agent_loop():
         except Exception: pass
         p.terminate()
 
-def start_agent():
+def start_agent(target_speaker_name: Optional[str] = None):
     global agent_task, stop_event
     if agent_task and not agent_task.done():
         return
     stop_event = asyncio.Event()
-    agent_task = asyncio.create_task(start_agent_loop())
+    agent_task = asyncio.create_task(start_agent_loop(target_speaker_name))
 
 def stop_agent():
     if stop_event:
