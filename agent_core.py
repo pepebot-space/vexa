@@ -95,7 +95,7 @@ def extract_inline_audio(parsed: dict) -> Optional[bytes]:
 
 # Global state
 agent_task = None
-stop_event = asyncio.Event()
+stop_event = None
 latest_frame = None
 agent_status = "idle"
 
@@ -185,7 +185,8 @@ async def start_agent_loop():
                         if ENABLE_NOISE_GATE: data = noise_gate.process(data)
                         b64_data = base64.b64encode(data).decode("utf-8")
                         await ws.send(json.dumps({"realtimeInput": {"mediaChunks": [{"mimeType": "audio/pcm;rate=16000", "data": b64_data}]}}))
-                    except Exception:
+                    except Exception as e:
+                        print(f"sender_audio exception: {e}")
                         stop_event.set()
                         return
 
@@ -193,7 +194,9 @@ async def start_agent_loop():
                 global latest_frame
                 if not ENABLE_CAMERA or cv2 is None: return
                 cap = await asyncio.to_thread(cv2.VideoCapture, 0)
-                if not cap or not cap.isOpened(): return
+                if not cap or not cap.isOpened():
+                    print("Could not open camera")
+                    return
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_FRAME_WIDTH, VIDEO_WIDTH)
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_FRAME_HEIGHT, VIDEO_HEIGHT)
                 try:
@@ -211,6 +214,8 @@ async def start_agent_loop():
                         if video_enabled:
                             await ws.send(json.dumps({"realtimeInput": {"mediaChunks": [{"mimeType": VIDEO_MIME, "data": b64}]}}))
                         await asyncio.sleep(VIDEO_INTERVAL_SEC)
+                except Exception as e:
+                    print(f"sender_video exception: {e}")
                 finally:
                     await asyncio.to_thread(cap.release)
 
@@ -218,7 +223,8 @@ async def start_agent_loop():
                 while not stop_event.is_set():
                     try:
                         message = await ws.recv()
-                    except Exception:
+                    except Exception as e:
+                        print(f"receiver exception: {e.__class__.__name__} - {e}")
                         stop_event.set()
                         return
                     if isinstance(message, bytes):
@@ -226,7 +232,9 @@ async def start_agent_loop():
                         audio_inline = extract_inline_audio(parsed_bin) if isinstance(parsed_bin, dict) else None
                     else:
                         parsed = try_parse_json(message)
-                        if parsed and parsed.get("error"): continue
+                        if parsed and parsed.get("error"):
+                            print(f"Server error message: {parsed['error']}")
+                            continue
                         audio_inline = extract_inline_audio(parsed) if parsed else None
                     
                     if audio_inline and len(audio_inline) >= 2 and len(audio_inline) % 2 == 0:
@@ -238,13 +246,16 @@ async def start_agent_loop():
                 asyncio.create_task(sender_video()),
                 asyncio.create_task(receiver()),
             ]
+            print("Agent looping...")
             await stop_event.wait()
+            print("stop_event was set, exiting agent loop.")
             for t in tasks: t.cancel()
     except Exception as e:
         agent_status = "error"
         print("Agent error:", e)
     finally:
         agent_status = "idle"
+        print("Agent finally block, cleaning up...")
         try: stream_in.stop_stream(); stream_in.close()
         except Exception: pass
         try: stream_out.stop_stream(); stream_out.close()
@@ -255,11 +266,12 @@ def start_agent():
     global agent_task, stop_event
     if agent_task and not agent_task.done():
         return
-    stop_event.clear()
+    stop_event = asyncio.Event()
     agent_task = asyncio.create_task(start_agent_loop())
 
 def stop_agent():
-    stop_event.set()
+    if stop_event:
+        stop_event.set()
 
 def get_latest_frame():
     return latest_frame
