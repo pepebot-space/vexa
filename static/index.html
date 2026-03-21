@@ -265,6 +265,9 @@
         
         <div class="flex justify-between items-center mb-4 border-b border-[#222] pb-2">
             <h2 class="text-sm tracking-wider uppercase">Motion Vector Control</h2>
+            <button id="modeToggleBtn" onclick="toggleControlMode()" class="text-[9px] uppercase tracking-widest border border-[#333] text-vexa-textSecondary hover:border-vexa-accent hover:text-vexa-accent px-2 py-1 transition-colors">
+                MODE: JOYSTICK
+            </button>
         </div>
         
         <div class="flex flex-1 justify-between items-center">
@@ -273,18 +276,24 @@
             <div class="flex flex-col justify-center gap-6">
                 <!-- Forward/Backward (Y-Axis) -->
                 <div>
-                    <div class="text-[10px] text-vexa-textSecondary uppercase tracking-widest mb-1">Maju/Mundur (Y) <span id="valY" class="text-white">12000</span></div>
-                    <input type="range" id="powerYSlider" min="2000" max="32767" value="12000" class="w-24 accent-vexa-textPrimary h-1 bg-gray-800 outline-none">
+                    <div class="text-[10px] text-vexa-textSecondary uppercase tracking-widest mb-1 flex justify-between items-center gap-2">
+                        <span>Forward/Backward (Y)</span>
+                        <input type="number" id="valY" value="12000" min="1000" max="32767" class="bg-transparent text-white w-14 text-right outline-none border-b border-gray-600 focus:border-vexa-accent p-0 tabular-nums" onchange="updateSliderFromInput('Y')">
+                    </div>
+                    <input type="range" id="powerYSlider" min="1000" max="32767" value="12000" class="w-24 accent-vexa-textPrimary h-1 bg-gray-800 outline-none" oninput="updateInputFromSlider('Y')" onchange="saveMotionConfig()">
                 </div>
                 <!-- Left/Right (X-Axis) -->
                 <div>
-                    <div class="text-[10px] text-vexa-textSecondary uppercase tracking-widest mb-1">Kanan/Kiri (X) <span id="valX" class="text-white">8000</span></div>
-                    <input type="range" id="powerXSlider" min="2000" max="32767" value="8000" class="w-24 accent-vexa-textPrimary h-1 bg-gray-800 outline-none">
+                    <div class="text-[10px] text-vexa-textSecondary uppercase tracking-widest mb-1 flex justify-between items-center gap-2">
+                        <span>Left/Right (X)</span>
+                        <input type="number" id="valX" value="8000" min="1000" max="32767" class="bg-transparent text-white w-14 text-right outline-none border-b border-gray-600 focus:border-vexa-accent p-0 tabular-nums" onchange="updateSliderFromInput('X')">
+                    </div>
+                    <input type="range" id="powerXSlider" min="1000" max="32767" value="8000" class="w-24 accent-vexa-textPrimary h-1 bg-gray-800 outline-none" oninput="updateInputFromSlider('X')" onchange="saveMotionConfig()">
                 </div>
             </div>
 
-            <!-- Joystick -->
-            <div class="flex flex-col items-center">
+            <!-- Joystick mode -->
+            <div id="joystickPanel" class="flex flex-col items-center">
                 <div class="joystick-container w-32 h-32" id="joystickArea">
                     <div id="joystickKnob" class="joystick-knob"></div>
                 </div>
@@ -292,6 +301,33 @@
                 <div class="mt-4 flex gap-4 text-[10px] text-vexa-textSecondary uppercase font-mono">
                     <span>X: <span id="joyX" class="text-white">0</span></span>
                     <span>Y: <span id="joyY" class="text-white">0</span></span>
+                </div>
+            </div>
+
+            <!-- D-pad mode (hidden by default) -->
+            <div id="dpadPanel" class="hidden flex flex-col items-center gap-1">
+                <!-- Row 1: Up -->
+                <div class="flex justify-center">
+                    <button onmousedown="startDpad('forward')" onmouseup="stopDpad()" onmouseleave="stopDpad()"
+                        ontouchstart="startDpad('forward')" ontouchend="stopDpad()"
+                        class="w-10 h-10 bg-[#111] border border-[#333] hover:border-vexa-accent text-vexa-textSecondary hover:text-vexa-accent rounded text-lg transition-colors select-none">↑</button>
+                </div>
+                <!-- Row 2: Left STOP Right -->
+                <div class="flex gap-1">
+                    <button onmousedown="startDpad('left')" onmouseup="stopDpad()" onmouseleave="stopDpad()"
+                        ontouchstart="startDpad('left')" ontouchend="stopDpad()"
+                        class="w-10 h-10 bg-[#111] border border-[#333] hover:border-vexa-accent text-vexa-textSecondary hover:text-vexa-accent rounded text-lg transition-colors select-none">←</button>
+                    <button onclick="stopDpadNow()"
+                        class="w-10 h-10 bg-red-900/40 border border-red-700 hover:bg-red-800/60 text-red-400 rounded text-[9px] font-bold tracking-widest transition-colors select-none">STP</button>
+                    <button onmousedown="startDpad('right')" onmouseup="stopDpad()" onmouseleave="stopDpad()"
+                        ontouchstart="startDpad('right')" ontouchend="stopDpad()"
+                        class="w-10 h-10 bg-[#111] border border-[#333] hover:border-vexa-accent text-vexa-textSecondary hover:text-vexa-accent rounded text-lg transition-colors select-none">→</button>
+                </div>
+                <!-- Row 3: Down -->
+                <div class="flex justify-center">
+                    <button onmousedown="startDpad('backward')" onmouseup="stopDpad()" onmouseleave="stopDpad()"
+                        ontouchstart="startDpad('backward')" ontouchend="stopDpad()"
+                        class="w-10 h-10 bg-[#111] border border-[#333] hover:border-vexa-accent text-vexa-textSecondary hover:text-vexa-accent rounded text-lg transition-colors select-none">↓</button>
                 </div>
             </div>
             
@@ -313,8 +349,19 @@
     let logPollInterval = null;
     let isVoiceActive = false;
 
-    document.getElementById('powerYSlider').addEventListener('input', e => document.getElementById('valY').textContent = e.target.value);
-    document.getElementById('powerXSlider').addEventListener('input', e => document.getElementById('valX').textContent = e.target.value);
+    function updateInputFromSlider(axis) {
+        document.getElementById('val' + axis).value = document.getElementById('power' + axis + 'Slider').value;
+    }
+
+    function updateSliderFromInput(axis) {
+        let val = parseInt(document.getElementById('val' + axis).value, 10);
+        if(isNaN(val)) val = 1000;
+        if(val < 1000) val = 1000;
+        if(val > 32767) val = 32767;
+        document.getElementById('power' + axis + 'Slider').value = val;
+        document.getElementById('val' + axis).value = val;
+        saveMotionConfig();
+    }
 
     // Chart JS totally removed
 
@@ -330,7 +377,11 @@
 
     // --- API & Core Functions ---
     async function api(endpoint, method = 'GET', body = null) {
-        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        const options = { 
+            method, 
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store'
+        };
         if (body) options.body = JSON.stringify(body);
         const response = await fetch(API_URL + '/api' + endpoint, options);
         if (!response.ok) {
@@ -597,6 +648,37 @@
         }
     }
 
+    // --- Control Mode Toggle (Joystick <-> D-pad) ---
+    let isDpadMode = false;
+    let dpadHoldTimer = null;
+
+    function toggleControlMode() {
+        isDpadMode = !isDpadMode;
+        document.getElementById('joystickPanel').classList.toggle('hidden', isDpadMode);
+        document.getElementById('dpadPanel').classList.toggle('hidden', !isDpadMode);
+        document.getElementById('modeToggleBtn').textContent = isDpadMode ? 'MODE: D-PAD' : 'MODE: JOYSTICK';
+        if (!isDpadMode) stopDpadNow(); // stop any lingering command
+    }
+
+    function startDpad(direction) {
+        if (!isConnected) return;
+        api('/move', 'POST', { action: direction }).catch(()=>{});
+        // Keep sending while held
+        dpadHoldTimer = setInterval(() => {
+            if (isConnected) api('/move', 'POST', { action: direction }).catch(()=>{});
+        }, 300);
+    }
+
+    function stopDpad() {
+        if (dpadHoldTimer) { clearInterval(dpadHoldTimer); dpadHoldTimer = null; }
+        if (isConnected) api('/move', 'POST', { action: 'stop' }).catch(()=>{});
+    }
+
+    function stopDpadNow() {
+        if (dpadHoldTimer) { clearInterval(dpadHoldTimer); dpadHoldTimer = null; }
+        if (isConnected) api('/move', 'POST', { action: 'stop' }).catch(()=>{});
+    }
+
     joystickArea.addEventListener('mousedown', e => { joystickActive = true; handleJoyMove(e); startSendingJoy(); });
     joystickArea.addEventListener('touchstart', e => { joystickActive = true; handleJoyMove(e); startSendingJoy(); });
     document.addEventListener('mousemove', handleJoyMove);
@@ -604,8 +686,31 @@
     document.addEventListener('mouseup', () => { if(joystickActive) { joystickActive = false; stopSendingJoy(); } });
     document.addEventListener('touchend', () => { if(joystickActive) { joystickActive = false; stopSendingJoy(); } });
 
+    async function loadMotionConfig() {
+        try {
+            const config = await api('/config/motion');
+            if (config.y_max !== undefined) {
+                document.getElementById('powerYSlider').value = config.y_max;
+                document.getElementById('valY').value = config.y_max;
+            }
+            if (config.x_max !== undefined) {
+                document.getElementById('powerXSlider').value = config.x_max;
+                document.getElementById('valX').value = config.x_max;
+            }
+        } catch(e) { console.error('Failed to load motion config:', e); }
+    }
+
+    async function saveMotionConfig() {
+        try {
+            const y = parseInt(document.getElementById('powerYSlider').value, 10);
+            const x = parseInt(document.getElementById('powerXSlider').value, 10);
+            await api('/config/motion', 'POST', { y_max: y, x_max: x });
+        } catch(e) { console.error('Failed to save motion config:', e); }
+    }
+
     // Initialize
     updateBatteryUI(0, 0, 0, '-', '-');
+    loadMotionConfig();
     
     // Resume existing connection on load
     api('/status').then(res => {

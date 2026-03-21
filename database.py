@@ -31,6 +31,12 @@ def init_db():
             raw_deci_volt INTEGER
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -70,6 +76,24 @@ def get_battery_history(limit: int = 24):
     conn.close()
     # Reverse to return chronological order
     return [dict(row) for row in reversed(rows)]
+
+def set_setting(key: str, value: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, str(value))
+    )
+    conn.commit()
+    conn.close()
+
+def get_setting(key: str, default: str = None) -> str:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row["value"] if row else default
 
 # Initialize DB when module is imported
 init_db()

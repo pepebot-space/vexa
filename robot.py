@@ -372,6 +372,23 @@ async def api_agent_status():
     return JSONResponse(content={"status": agent_core.get_status()})
 
 
+class MotionConfigRequest(BaseModel):
+    y_max: int
+    x_max: int
+
+@app.get("/api/config/motion")
+async def get_motion_config():
+    y_val = await asyncio.to_thread(database.get_setting, "motion_y_max", "12000")
+    x_val = await asyncio.to_thread(database.get_setting, "motion_x_max", "8000")
+    return {"y_max": int(y_val), "x_max": int(x_val)}
+
+@app.post("/api/config/motion")
+async def set_motion_config(req: MotionConfigRequest):
+    await asyncio.to_thread(database.set_setting, "motion_y_max", str(req.y_max))
+    await asyncio.to_thread(database.set_setting, "motion_x_max", str(req.x_max))
+    return JSONResponse(content={"status": "success"})
+
+
 @app.get("/api/status")
 async def get_status():
     return JSONResponse(content=robot_state)
