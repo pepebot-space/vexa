@@ -578,6 +578,21 @@ files = [
 pyobjc-core = ">=9.2"
 
 [[package]]
+name = "pyserial"
+version = "3.5"
+description = "Python Serial Port Extension"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0"},
+    {file = "pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb"},
+]
+
+[package.extras]
+cp2110 = ["hidapi"]
+
+[[package]]
 name = "starlette"
 version = "0.37.2"
 description = "The little ASGI library that shines."
@@ -962,4 +977,4 @@ all = ["winrt-Windows.Foundation.Collections[all] (==2.0.0b1)", "winrt-Windows.F
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "5f335973063ce459e6bf9d014552c1882056a747b09976393282608e8d856f63"
+content-hash = "22c956de021ca48f7f494c13c90e6c0bc46da04129a172fae5781bcaf9fe66db"

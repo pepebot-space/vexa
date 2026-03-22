@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lidar SLAM Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        #canvas-container { width: 100%; height: 70vh; }
+        #canvas-container canvas { width: 100%; height: 100%; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto p-4">
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400">Lidar SLAM Room Visualization</h1>
+            <p class="text-gray-400">Real-time 360° lidar scanning with 3D map generation</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-sm text-gray-400 mb-1">Status</h3>
+                <p id="status" class="text-lg font-semibold text-yellow-400">Disconnected</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-sm text-gray-400 mb-1">Scan Count</h3>
+                <p id="scan-count" class="text-lg font-semibold text-green-400">0</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-sm text-gray-400 mb-1">Points</h3>
+                <p id="point-count" class="text-lg font-semibold text-blue-400">0</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-sm text-gray-400 mb-1">FPS</h3>
+                <p id="fps" class="text-lg font-semibold text-purple-400">0</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg overflow-hidden mb-6">
+            <div class="p-2 bg-gray-700 flex items-center gap-4">
+                <span class="text-sm text-gray-300">Controls:</span>
+                <button id="btn-connect" class="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-sm">Connect</button>
+                <button id="btn-save-map" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">Save Map</button>
+                <button id="btn-clear" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-sm">Clear</button>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="auto-rotate" checked class="form-checkbox">
+                    <span>Auto Rotate</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="show-lines" class="form-checkbox">
+                    <span>Show Lines</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="range" id="point-size" min="1" max="10" value="3" class="form-range">
+                    <span>Point Size: <span id="point-size-val">3</span></span>
+                </label>
+            </div>
+            <div id="canvas-container"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-lg font-semibold mb-3 text-cyan-400">2D Top-Down View</h3>
+                <canvas id="canvas-2d" width="400" height="400" class="bg-gray-900 rounded w-full"></canvas>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h3 class="text-lg font-semibold mb-3 text-cyan-400">Console Log</h3>
+                <div id="console" class="h-64 overflow-y-auto bg-gray-900 rounded p-2 font-mono text-xs"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WS_URL = 'ws://localhost:8766';
+        let ws = null;
+        let scene, camera, renderer, points3D, lines3D;
+        let currentPoints = [];
+        let allPoints = [];
+        let scanCount = 0;
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
+            camera.position.set(0, 3000, 3000);
+            camera.lookAt(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            
+            const gridHelper = new THREE.GridHelper(5000, 50, 0x444444, 0x222222);
+            scene.add(gridHelper);
+            
+            const axesHelper = new THREE.AxesHelper(1000);
+            scene.add(axesHelper);
+            
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 1, 10000);
+            pointLight.position.set(0, 2000, 0);
+            scene.add(pointLight);
+            
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            let theta = 0;
+            let phi = Math.PI / 4;
+            let radius = 4000;
+            
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+            });
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const deltaMove = {
+                    x: e.offsetX - previousMousePosition.x,
+                    y: e.offsetY - previousMousePosition.y
+                };
+                theta -= deltaMove.x * 0.01;
+                phi -= deltaMove.y * 0.01;
+                phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi));
+            });
+            
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            renderer.domElement.addEventListener('wheel', (e) => {
+                radius += e.deltaY * 0.5;
+                radius = Math.max(500, Math.min(10000, radius));
+            });
+
+            renderer.domElement.addEventListener('mouseleave', () => {
+                isDragging = false;
+            });
+            
+            previousMousePosition = { x: 0, y: 0 };
+            
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                if (document.getElementById('auto-rotate').checked && !isDragging) {
+                    theta += 0.002;
+                }
+                
+                camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+                camera.position.y = radius * Math.cos(phi);
+                camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+                camera.lookAt(0, 0, 0);
+                
+                renderer.render(scene, camera);
+                
+                frameCount++;
+                const now = Date.now();
+                if (now - lastFrameTime >= 1000) {
+                    document.getElementById('fps').textContent = frameCount;
+                    frameCount = 0;
+                    lastFrameTime = now;
+                }
+            }
+            animate();
+        }
+
+        function update3DPoints(points) {
+            if (points3D) {
+                scene.remove(points3D);
+                points3D.geometry.dispose();
+                points3D.material.dispose();
+            }
+            
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(points.length * 3);
+            const colors = new Float32Array(points.length * 3);
+            
+            points.forEach((p, i) => {
+                const angleRad = (p.angle * Math.PI) / 180;
+                const x = (p.distance / 10) * Math.cos(angleRad);
+                const z = (p.distance / 10) * Math.sin(angleRad);
+                
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = 0;
+                positions[i * 3 + 2] = z;
+                
+                const dist = p.distance;
+                if (dist < 500) {
+                    colors[i * 3] = 1;
+                    colors[i * 3 + 1] = 0.2;
+                    colors[i * 3 + 2] = 0.2;
+                } else if (dist < 1500) {
+                    colors[i * 3] = 1;
+                    colors[i * 3 + 1] = 1;
+                    colors[i * 3 + 2] = 0;
+                } else {
+                    colors[i * 3] = 0.2;
+                    colors[i * 3 + 1] = 1;
+                    colors[i * 3 + 2] = 0.2;
+                }
+            });
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const size = parseFloat(document.getElementById('point-size').value);
+            const material = new THREE.PointsMaterial({
+                size: size,
+                vertexColors: true,
+                sizeAttenuation: true
+            });
+            
+            points3D = new THREE.Points(geometry, material);
+            scene.add(points3D);
+            
+            if (document.getElementById('show-lines').checked) {
+                if (lines3D) {
+                    scene.remove(lines3D);
+                    lines3D.geometry.dispose();
+                    lines3D.material.dispose();
+                }
+                
+                const lineGeometry = new THREE.BufferGeometry();
+                lineGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.3, transparent: true });
+                lines3D = new THREE.LineLoop(lineGeometry, lineMaterial);
+                scene.add(lines3D);
+            }
+        }
+
+        function draw2D(points) {
+            const canvas = document.getElementById('canvas-2d');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) / 8000;
+            
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = '#333';
+            ctx.beginPath();
+            for (let r = 500; r <= 3000; r += 500) {
+                ctx.moveTo(centerX + r * scale, centerY);
+                ctx.arc(centerX, centerY, r * scale, 0, Math.PI * 2);
+            }
+            ctx.stroke();
+            ctx.strokeStyle = '#444';
+            ctx.beginPath();
+            for (let a = 0; a < 360; a += 30) {
+                const rad = (a * Math.PI) / 180;
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX + Math.cos(rad) * 2000 * scale, centerY + Math.sin(rad) * 2000 * scale);
+            }
+            ctx.stroke();
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#00ff00';
+            points.forEach(p => {
+                if (p.distance > 0) {
+                    const angleRad = (p.angle * Math.PI) / 180;
+                    const x = centerX + (p.distance / 10) * Math.cos(angleRad) * scale;
+                    const y = centerY - (p.distance / 10) * Math.sin(angleRad) * scale;
+                    
+                    const dist = p.distance;
+                    if (dist < 500) {
+                        ctx.fillStyle = '#ff3333';
+                    } else if (dist < 1500) {
+                        ctx.fillStyle = '#ffff00';
+                    } else {
+                        ctx.fillStyle = '#33ff33';
+                    }
+                    ctx.fillRect(x - 1, y - 1, 2, 2);
+                }
+            });
+        }
+
+        function log(message, type = 'info') {
+            const consoleEl = document.getElementById('console');
+            const time = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-gray-300',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                warning: 'text-yellow-400'
+            };
+            consoleEl.innerHTML += `<div class="${colors[type]}">[${time}] ${message}</div>`;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'text-lg font-semibold text-green-400';
+                log('Connected to WebSocket server', 'success');
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'text-lg font-semibold text-red-400';
+                log('Disconnected from WebSocket server', 'warning');
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket error: ' + error, 'error');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'scan_complete') {
+                    scanCount = data.scan_id;
+                    currentPoints = data.points;
+                    document.getElementById('scan-count').textContent = scanCount;
+                    document.getElementById('point-count').textContent = data.point_count;
+                    update3DPoints(currentPoints);
+                    draw2D(currentPoints);
+                    log(`Scan #${scanCount} complete: ${data.point_count} points`, 'success');
+                } else if (data.type === 'scan_progress') {
+                    allPoints = allPoints.concat(data.points);
+                    document.getElementById('point-count').textContent = allPoints.length;
+                }
+            };
+        }
+
+        async function saveMap() {
+            if (currentPoints.length === 0) {
+                log('No scan data to save', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/map/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        map_name: 'room_scan_' + Date.now(),
+                        points: currentPoints
+                    })
+                });
+                
+                if (response.ok) {
+                    log('Map saved successfully!', 'success');
+                } else {
+                    log('Failed to save map', 'error');
+                }
+            } catch (e) {
+                log('Error saving map: ' + e.message, 'error');
+            }
+        }
+
+        document.getElementById('btn-connect').addEventListener('click', connect);
+        document.getElementById('btn-save-map').addEventListener('click', saveMap);
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            currentPoints = [];
+            allPoints = [];
+            if (points3D) {
+                scene.remove(points3D);
+                points3D = null;
+            }
+            if (lines3D) {
+                scene.remove(lines3D);
+                lines3D = null;
+            }
+            document.getElementById('scan-count').textContent = '0';
+            document.getElementById('point-count').textContent = '0';
+            draw2D([]);
+            log('Cleared all data', 'warning');
+        });
+        document.getElementById('point-size').addEventListener('input', (e) => {
+            document.getElementById('point-size-val').textContent = e.target.value;
+            if (currentPoints.length > 0) {
+                update3DPoints(currentPoints);
+            }
+        });
+        document.getElementById('show-lines').addEventListener('change', () => {
+            if (currentPoints.length > 0) {
+                update3DPoints(currentPoints);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            init3D();
+            log('Visualization initialized', 'success');
+            log('Click "Connect" to start receiving lidar data', 'info');
+        });
+    </script>
+</body>
+</html>

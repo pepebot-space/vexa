@@ -2,3 +2,4 @@ prototype
 .venv
 minirobot.db
 __pycache__
+.claude
