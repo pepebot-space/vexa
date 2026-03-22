@@ -9,10 +9,12 @@ import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 from database import save_slam_map, get_slam_maps
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
+FRONTEND_DIR = os.path.dirname(__file__)
 PORT = 808
 
 

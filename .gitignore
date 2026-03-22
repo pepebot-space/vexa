@@ -3,3 +3,5 @@ prototype
 minirobot.db
 __pycache__
 .claude
+.ruff_cache
+.env

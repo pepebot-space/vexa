@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "robot-research"
+version = "0.1.0"
+description = "Autonomous Robot Research - LiDAR SLAM and Exploration"
+authors = ["PEPEBOT Team"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+websockets = "^12.0"
+pyserial = "^3.5"
+numpy = "^1.24"

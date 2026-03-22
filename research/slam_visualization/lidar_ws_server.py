@@ -13,7 +13,9 @@ from datetime import datetime
 import websockets
 import serial
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 from database import get_connection
 
 SERIAL_PORT = "/dev/cu.usbserial-0001"
