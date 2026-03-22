@@ -3,425 +3,531 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autonomous Room Mapping - SLAM Visualization</title>
+    <title>Robot Autonomous Mapping</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .map-canvas { image-rendering: pixelated; }
-        .legend-item { display: flex; align-items: center; gap: 8px; margin:4px 0; }
-        .legend-color { width: 20px; height: 20px; border-radius: 4px; }
+        .control-btn {
+            width: 50px; height: 50px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: bold;
+            transition: all 0.1s;
+        }
+        .control-btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
     <div class="container mx-auto p-4">
-        <header class="mb-6">
-            <h1 class="text-3xl font-bold text-cyan-400">Autonomous Room Mapping</h1>
-            <p class="text-gray-400">Frontier-based exploration with RRT path planning</p>
+        <header class="mb-4">
+            <h1 class="text-2xl font-bold text-cyan-400">Robot Autonomous Mapping</h1>
+            <p class="text-gray-400 text-sm">LiDAR SLAM with Frontier Exploration | <span class="text-yellow-400">Scroll to zoom, drag to pan</span></p>
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-            <div class="bg-gray-800 rounded-lg p-4">
-                <h3 class="text-sm text-gray-400 mb-1">Status</h3>
-                <p id="status" class="text-lg font-semibold text-yellow-400">Idle</p>
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- 2D Map View -->
+            <div class="lg:col-span-3 bg-gray-800 rounded-lg overflow-hidden">
+                <div class="p-2 bg-gray-700 flex items-center gap-4 text-sm flex-wrap">
+                    <span>Scan: <span id="scan-count" class="text-cyan-400">0</span></span>
+                    <span>Source: <span id="scan-source" class="text-yellow-400">-</span></span>
+                    <span>Zoom: <span id="zoom-level" class="text-green-400">1.0x</span></span>
+                    <button id="btn-zoom-reset" class="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs">Reset View</button>
+                    <label class="flex items-center gap-1 ml-2">
+                        <input type="checkbox" id="show-lines" checked class="form-checkbox">
+                        <span>Lines</span>
+                    </label>
+                    <label class="flex items-center gap-1">
+                        <input type="checkbox" id="show-path" checked class="form-checkbox">
+                        <span>Path</span>
+                    </label>
+                    <label class="flex items-center gap-1">
+                        <input type="checkbox" id="show-grid" checked class="form-checkbox">
+                        <span>Occupancy</span>
+                    </label>
+                </div>
+                <div class="relative" style="height: 550px; cursor: grab;" id="canvas-container">
+                    <canvas id="canvas-2d" class="absolute inset-0 w-full h-full"></canvas>
+                </div>
             </div>
-            <div class="bg-gray-800 rounded-lg p-4">
-                <h3 class="text-sm text-gray-400 mb-1">Scans</h3>
-                <p id="scan-count" class="text-lg font-semibold text-green-400">0</p>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-4">
-                <h3 class="text-sm text-gray-400 mb-1">Area Explored</h3>
-                <p id="area" class="text-lg font-semibold text-blue-400">0.00 m²</p>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-4">
-                <h3 class="text-sm text-gray-400 mb-1">Distance</h3>
-                <p id="distance" class="text-lg font-semibold text-purple-400">0.00 mm</p>
+
+            <!-- Controls -->
+            <div class="space-y-3">
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <h3 class="text-sm font-semibold mb-2 text-gray-300">Status</h3>
+                    <div class="space-y-1 text-sm">
+                        <div>Robot: <span id="robot-status" class="status-simulation">Simulation</span></div>
+                        <div>LiDAR: <span id="lidar-status" class="status-disconnected">Disconnected</span></div>
+                        <div>Exploration: <span id="explore-status" class="text-yellow-400">Idle</span></div>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-400 font-mono">
+                        <div>X: <span id="robot-x">0</span> mm</div>
+                        <div>Y: <span id="robot-y">0</span> mm</div>
+                        <div>Yaw: <span id="robot-yaw">0</span>°</div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <h3 class="text-sm font-semibold mb-2 text-gray-300">Movement</h3>
+                    <div class="grid grid-cols-3 gap-1">
+                        <div></div>
+                        <button id="btn-forward" class="control-btn bg-green-600 hover:bg-green-500 rounded">↑</button>
+                        <div></div>
+                        <button id="btn-left" class="control-btn bg-blue-600 hover:bg-blue-500 rounded">←</button>
+                        <button id="btn-stop" class="control-btn bg-red-600 hover:bg-red-500 rounded">■</button>
+                        <button id="btn-right" class="control-btn bg-blue-600 hover:bg-blue-500 rounded">→</button>
+                        <div></div>
+                        <button id="btn-backward" class="control-btn bg-green-600 hover:bg-green-500 rounded">↓</button>
+                        <div></div>
+                    </div>
+                    <p class="text-xs text-gray-400 text-center mt-1">Fwd: 2000 | Turn: 1500</p>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-3 space-y-2">
+                    <button id="btn-scan" class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded text-sm font-semibold">📷 Scan</button>
+                    <button id="btn-explore" class="w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm font-semibold">▶ Start Exploration</button>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-3 space-y-2">
+                    <h3 class="text-sm font-semibold text-gray-300">Simulation Map</h3>
+                    <select id="map-select" class="w-full bg-gray-700 rounded px-2 py-1 text-sm">
+                        <option value="default">Default Room</option>
+                    </select>
+                    <button id="btn-load-map" class="w-full px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded text-sm">📂 Load Map</button>
+                    <button id="btn-reset" class="w-full px-3 py-1 bg-yellow-600 hover:bg-yellow-500 rounded text-sm">🔄 Reset</button>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-3 space-y-2">
+                    <h3 class="text-sm font-semibold text-gray-300">Calibration</h3>
+                    <div class="grid grid-cols-3 gap-1">
+                        <input type="number" id="cal-x" placeholder="X" class="bg-gray-700 rounded px-2 py-1 text-xs" value="0">
+                        <input type="number" id="cal-y" placeholder="Y" class="bg-gray-700 rounded px-2 py-1 text-xs" value="0">
+                        <input type="number" id="cal-yaw" placeholder="Yaw°" class="bg-gray-700 rounded px-2 py-1 text-xs" value="0">
+                    </div>
+                    <div class="grid grid-cols-2 gap-1">
+                        <button id="btn-set-pose" class="px-2 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-xs">Set Pose</button>
+                        <button id="btn-reset-pose" class="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 rounded text-xs">Reset</button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div class="lg:col-span-2 bg-gray-800 rounded-lg overflow-hidden">
-                <div class="p-3 bg-gray-700 flex items-center justify-between">
-                    <span class="font-semibold">Occupancy Map</span>
-                    <div class="flexgap-2">
-                        <label class="flex items-center gap-2 text-sm">
-                            <input type="checkbox" id="show-path" checked class="form-checkbox">
-                            <span>Show Path</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-sm">
-                            <input type="checkbox" id="show-frontiers" checked class="form-checkbox">
-                            <span>Show Frontiers</span>
-                        </label>
-                    </div>
-                </div>
-                <div class="p-4">
-                    <canvas id="map-canvas" class="map-canvas w-full bg-gray-950 rounded" width="600" height="600"></canvas>
-                </div>
-                <div class="p-3 bg-gray-700 flex items-center gap-4">
-                    <button id="btn-start" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded font-semibold">Start Exploration</button>
-                    <button id="btn-stop" class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded font-semibold" disabled>Stop</button>
-                    <button id="btn-reset" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded font-semibold">Reset</button>
-                    <button id="btn-scan" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded font-semibold">Manual Scan</button>
-                    <button id="btn-save" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded font-semibold">Save Map</button>
-                </div>
-            </div>
-
-            <div class="bg-gray-800 rounded-lg p-4">
-                <h3 class="font-semibold mb-3">Robot Position</h3>
-                <div class="space-y-2text-sm">
-                    <p>X: <span id="robot-x" class="text-cyan-400">0.00</span> mm</p>
-                    <p>Y: <span id="robot-y" class="text-cyan-400">0.00</span> mm</p>
-                    <p>Yaw: <span id="robot-yaw" class="text-cyan-400">0.00</span>°</p>
-                </div>
-                
-                <h3 class="font-semibold mt-6 mb-3">Manual Control</h3>
-                <div class="grid grid-cols-3 gap-2 mb-4">
-                    <div></div>
-                    <button id="btn-forward" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">↑</button>
-                    <div></div>
-                    <button id="btn-left" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">←</button>
-                    <button id="btn-stop-move" class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded">■</button>
-                    <button id="btn-right" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">→</button>
-                    <div></div>
-                    <button id="btn-backward" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">↓</button>
-                    <div></div>
-                </div>
-
-                <h3 class="font-semibold mt-6 mb-3">Legend</h3>
-                <div class="text-sm">
-                    <div class="legend-item">
-                        <div class="legend-color bg-white"></div>
-                        <span>Free Space</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color bg-gray-600"></div>
-                        <span>Unknown</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color bg-black"></div>
-                        <span>Occupied</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color bg-cyan-500"></div>
-                        <span>Robot</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color bg-yellow-500"></div>
-                        <span>Frontier</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color bg-green-500"></div>
-                        <span>Planned Path</span>
-                    </div>
-                </div>
-
-                <h3 class="font-semibold mt-6 mb-3">Console</h3>
-                <div id="console" class="h-32 overflow-y-auto bg-gray-950 rounded p-2 font-mono text-xs"></div>
-            </div>
-        </div>
-
-        <div class="bg-gray-800 rounded-lg p-4">
-            <h3 class="font-semibold mb-3">Algorithm Reference (RELAX Paper)</h3>
-            <div class="text-sm text-gray-300 space-y-2">
-                <p><strong>Map Constructor:</strong> Occupancy grid usinglog-odds Bayes update from 2D LiDAR scans</p>
-                <p><strong>Path Planner:</strong> RRT (Rapidly exploring Random Tree) withcollision checking and path smoothing</p>
-                <p><strong>Exploration:</strong> Frontier-based - detects boundaries between known free space and unknown regions</p>
-                <p><strong>Paper:</strong> <a href="https://arxiv.org/html/2309.08095v2" target="_blank" class="text-cyan-400 hover:underline">arXiv:2309.08095</a></p>
-            </div>
+        <!-- Console -->
+        <div class="bg-gray-800 rounded-lg mt-4 p-3">
+            <h3 class="text-sm font-semibold text-gray-300 mb-2">Console</h3>
+            <div id="console" class="h-24 overflow-y-auto bg-gray-900 rounded p-2 font-mono text-xs"></div>
         </div>
     </div>
 
     <script>
         const WS_URL = 'ws://localhost:8767';
         let ws = null;
-        let mapData = null;
+        let scanCount = 0;
+        let exploring = false;
+        let moveInterval = null;
+
+        // Map data
+        let currentPoints = [];
+        let occupancyGrid = null;
+        let gridWidth = 400;
+        let gridHeight = 400;
+        let gridResolution = 50;
         let robotPose = { x: 0, y: 0, yaw: 0 };
         let currentPath = [];
-        let exploring = false;
-        let manualMoveInterval = null;
 
-        const canvas = document.getElementById('map-canvas');
+        // Canvas with pan/zoom
+        const canvas = document.getElementById('canvas-2d');
         const ctx = canvas.getContext('2d');
+        let scale = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
 
-        function log(message, type = 'info') {
-            const consoleEl = document.getElementById('console');
-            const time = new Date().toLocaleTimeString();
-            const colors = {
-                info: 'text-gray-300',
-                success: 'text-green-400',
-                error: 'text-red-400',
-                warning: 'text-yellow-400'
-            };
-            consoleEl.innerHTML += `<div class="${colors[type]}">[${time}] ${message}</div>`;
-            consoleEl.scrollTop = consoleEl.scrollHeight;
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            draw();
         }
 
-        function connect() {
-            ws = new WebSocket(WS_URL);
-            
-            ws.onopen = () => {
-                document.getElementById('status').textContent = 'Connected';
-                document.getElementById('status').className = 'text-lg font-semibold text-green-400';
-                log('Connected to server', 'success');
-            };
-            
-            ws.onclose = () => {
-                document.getElementById('status').textContent = 'Disconnected';
-                document.getElementById('status').className = 'text-lg font-semibold text-red-400';
-                log('Disconnected from server', 'warning');
-            };
-            
-            ws.onerror = (error) => {
-                log('WebSocket error', 'error');
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        function handleMessage(data) {
-            switch (data.type) {
-                case 'map_update':
-                    mapData = data.map;
-                    robotPose = data.robot_pose || robotPose;
-                    renderMap();
-                    break;
-                case 'robot_moved':
-                    robotPose = data.pose;
-                    renderMap();
-                    break;
-                case 'scan_data':
-                    robotPose = data.pose;
-                    break;
-                case 'path_planned':
-                    currentPath = data.path;
-                    log(`Path planned: ${currentPath.length} waypoints`, 'info');
-                    break;
-                case 'exploration_status':
-                    updateStats(data.stats || {});
-                    break;
-                case 'exploration_started':
-                    exploring = true;
-                    document.getElementById('status').textContent = 'Exploring';
-                    document.getElementById('status').className = 'text-lg font-semibold text-green-400';
-                    document.getElementById('btn-start').disabled = true;
-                    document.getElementById('btn-stop').disabled = false;
-                    log('Exploration started', 'success');
-                    break;
-                case 'exploration_stopped':
-                case 'exploration_completed':
-                    exploring = false;
-                    document.getElementById('status').textContent = 'Completed';
-                    document.getElementById('status').className = 'text-lg font-semibold text-blue-400';
-                    document.getElementById('btn-start').disabled = false;
-                    document.getElementById('btn-stop').disabled = true;
-                    log('Exploration completed', 'success');
-                    break;
-                case 'reset_complete':
-                    mapData = null;
-                    currentPath = [];
-                    robotPose = { x: 0, y: 0, yaw: 0 };
-                    updateStats({});
-                    renderMap();
-                    log('Map reset', 'warning');
-                    break;
-                case 'map_saved':
-                    log(`Map saved: ${data.map_name}`, 'success');
-                    break;
+        // Pan with mouse drag
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            canvas.style.cursor = 'grabbing';
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                offsetX += e.clientX - lastMouseX;
+                offsetY += e.clientY - lastMouseY;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                draw();
             }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        // Zoom with scroll wheel
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.1, Math.min(10, scale * zoomFactor));
+            
+            // Zoom towards mouse position
+            offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+            offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+            
+            scale = newScale;
+            document.getElementById('zoom-level').textContent = scale.toFixed(1) + 'x';
+            draw();
+        });
+
+        document.getElementById('btn-zoom-reset').addEventListener('click', () => {
+            scale = 1;
+            offsetX = 0;
+            offsetY = 0;
+            document.getElementById('zoom-level').textContent = '1.0x';
+            draw();
+        });
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('console');
+            const time = new Date().toLocaleTimeString();
+            const colors = { info: 'text-gray-300', success: 'text-green-400', error: 'text-red-400', warning: 'text-yellow-400' };
+            el.innerHTML += `<div class="${colors[type]}">[${time}] ${msg}</div>`;
+            el.scrollTop = el.scrollHeight;
         }
 
-        function renderMap() {
-            if (!mapData) return;
+        function draw() {
+            const w = canvas.width;
+            const h = canvas.height;
             
-            const width = mapData.width;
-            const height = mapData.height;
-            const resolution = mapData.resolution;
-            const grid = mapData.grid;
+            // Clear
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, w, h);
             
-            canvas.width = width;
-            canvas.height = height;
-            
-            const imageData = ctx.createImageData(width, height);
-            
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const value = grid[y][x];
-                    const idx = (y * width + x) * 4;
-                    
-                    if (value < 0) {
-                        imageData.data[idx] = 100;
-                        imageData.data[idx + 1] = 100;
-                        imageData.data[idx + 2] = 100;
-                        imageData.data[idx + 3] = 255;
-                    } else if (value > 50) {
-                        const intensity = Math.min(255, value * 2.55);
-                        imageData.data[idx] = intensity;
-                        imageData.data[idx + 1] = intensity;
-                        imageData.data[idx + 2] = intensity;
-                        imageData.data[idx + 3] = 255;
-                    } else {
-                        const intensity = 255 - (value * 2);
-                        imageData.data[idx] = intensity;
-                        imageData.data[idx + 1] = intensity;
-                        imageData.data[idx + 2] = intensity;
-                        imageData.data[idx + 3] = 255;
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            const cx = w / 2;
+            const cy = h / 2;
+            const baseScale = Math.min(w, h) / 5000; // 5 meters view
+
+            // Draw occupancy grid
+            if (occupancyGrid && document.getElementById('show-grid').checked) {
+                const gw = gridWidth;
+                const gh = gridHeight;
+                const res = gridResolution;
+                for (let gy = 0; gy < gh; gy++) {
+                    for (let gx = 0; gx < gw; gx++) {
+                        const v = occupancyGrid[gy * gw + gx];
+                        if (v < 0) continue;
+                        let color;
+                        if (v > 50) {
+                            const c = Math.floor(150 - v);
+                            color = `rgb(${c}, ${c}, ${c})`;
+                        } else {
+                            const c = Math.floor(60 + v);
+                            color = `rgb(${c}, ${c}, ${c})`;
+                        }
+                        const px = cx + (gx - gw/2) * res / 10 * baseScale;
+                        const py = cy - (gy - gh/2) * res / 10 * baseScale;
+                        ctx.fillStyle = color;
+                        ctx.fillRect(px - 1, py - 1, 3, 3);
                     }
                 }
             }
-            
-            ctx.putImageData(imageData, 0, 0);
-            
-            if (document.getElementById('show-frontiers').checked) {
-                drawFrontiers();
-            }
-            
-            if (document.getElementById('show-path').checked && currentPath.length > 0) {
-                drawPath();
-            }
-            
-            drawRobot();
-            
-            document.getElementById('robot-x').textContent = robotPose.x.toFixed(2);
-            document.getElementById('robot-y').textContent = robotPose.y.toFixed(2);
-            document.getElementById('robot-yaw').textContent = (robotPose.yaw * 180 / Math.PI).toFixed(2);
-        }
 
-        function drawFrontiers() {
-            // Frontiers would be calculated on server side
-            // For now, just show unknown boundaries as yellow
-        }
-
-        function drawPath() {
-            if (currentPath.length < 2) return;
-            
-            ctx.strokeStyle = '#22c55e';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            
-            const centerX = mapData.width / 2;
-            const centerY = mapData.height / 2;
-            const resolution = mapData.resolution;
-            
-            const startX = centerX + currentPath[0][0] / resolution;
-            const startY = centerY - currentPath[0][1] / resolution;
-            ctx.moveTo(startX, startY);
-            
-            for (let i = 1; i < currentPath.length; i++) {
-                const x = centerX + currentPath[i][0] / resolution;
-                const y = centerY - currentPath[i][1] / resolution;
-                ctx.lineTo(x, y);
-            }
-            
-            ctx.stroke();
-            
-            // Draw waypoints
-            ctx.fillStyle = '#22c55e';
-            for (let i = 0; i < currentPath.length; i++) {
-                const x = centerX + currentPath[i][0] / resolution;
-                const y = centerY - currentPath[i][1] / resolution;
+            // Draw grid circles (reference)
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1 / scale;
+            for (let r = 500; r <= 3000; r += 500) {
                 ctx.beginPath();
-                ctx.arc(x, y, 3, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.arc(cx, cy, r * baseScale / 10, 0, Math.PI * 2);
+                ctx.stroke();
             }
-        }
 
-        function drawRobot() {
-            if (!mapData) return;
-            
-            const centerX = mapData.width / 2;
-            const centerY = mapData.height / 2;
-            const resolution = mapData.resolution;
-            
-            const rx = centerX + robotPose.x / resolution;
-            const ry = centerY - robotPose.y / resolution;
+            // Draw angle lines
+            ctx.strokeStyle = '#333';
+            ctx.beginPath();
+            for (let a = 0; a < 360; a += 45) {
+                const rad = (a * Math.PI) / 180;
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + Math.cos(rad) * 3000 * baseScale / 10, cy - Math.sin(rad) * 3000 * baseScale / 10);
+            }
+            ctx.stroke();
+
+            // Draw distance labels
+            ctx.fillStyle = '#555';
+            ctx.font = `${10 / scale}px sans-serif`;
+            ctx.textAlign = 'left';
+            for (let r = 1000; r <= 3000; r += 1000) {
+                ctx.fillText(`${r/1000}m`, cx + r * baseScale / 10 + 5, cy + 3);
+            }
+
+            // Draw current scan points with lines (relative to robot position)
+            if (currentPoints.length > 0) {
+                // Draw lines
+                if (document.getElementById('show-lines').checked) {
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+                    ctx.lineWidth = 1.5 / scale;
+                    ctx.beginPath();
+                    currentPoints.forEach((p, i) => {
+                        if (p.distance > 0) {
+                            const angleRad = (p.angle * Math.PI) / 180;
+                            const x = cx + (p.distance / 10) * Math.cos(angleRad) * baseScale;
+                            const y = cy - (p.distance / 10) * Math.sin(angleRad) * baseScale;
+                            if (i === 0) ctx.moveTo(x, y);
+                            else ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+
+                // Draw points
+                currentPoints.forEach(p => {
+                    if (p.distance > 0) {
+                        const angleRad = (p.angle * Math.PI) / 180;
+                        const x = cx + (p.distance / 10) * Math.cos(angleRad) * baseScale;
+                        const y = cy - (p.distance / 10) * Math.sin(angleRad) * baseScale;
+
+                        if (p.distance < 500) ctx.fillStyle = '#ff3333';
+                        else if (p.distance < 1500) ctx.fillStyle = '#ffff00';
+                        else ctx.fillStyle = '#33ff33';
+                        ctx.fillRect(x - 2/Math.sqrt(scale), y - 2/Math.sqrt(scale), 4/Math.sqrt(scale), 4/Math.sqrt(scale));
+                    }
+                });
+            }
+
+            // Draw path
+            if (currentPath.length > 1 && document.getElementById('show-path').checked) {
+                ctx.strokeStyle = '#ff6600';
+                ctx.lineWidth = 3 / scale;
+                ctx.beginPath();
+                currentPath.forEach((p, i) => {
+                    const x = cx + (p[0] / 10) * baseScale;
+                    const y = cy - (p[1] / 10) * baseScale;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }
+
+            // Draw robot at center
+            const robotX = cx + (robotPose.x / 10) * baseScale;
+            const robotY = cy - (robotPose.y / 10) * baseScale;
             
             ctx.save();
-            ctx.translate(rx, ry);
+            ctx.translate(robotX, robotY);
             ctx.rotate(-robotPose.yaw);
             
+            // Robot body
             ctx.fillStyle = '#06b6d4';
             ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Direction arrow
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
             ctx.moveTo(0, -10);
-            ctx.lineTo(-7,10);
-            ctx.lineTo(7, 10);
+            ctx.lineTo(-5, 5);
+            ctx.lineTo(5, 5);
             ctx.closePath();
             ctx.fill();
             
             ctx.restore();
+
+            ctx.restore();
+
+            // Status text (not transformed)
+            ctx.fillStyle = '#888';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Points: ${currentPoints.length}`, 10, 20);
+            ctx.fillText(`Pos: (${robotPose.x.toFixed(0)}, ${robotPose.y.toFixed(0)})`, 10, 35);
+            ctx.fillText(`Yaw: ${(robotPose.yaw * 180 / Math.PI).toFixed(1)}°`, 10, 50);
         }
 
-        function updateStats(stats) {
-            if (stats.total_scans !== undefined) {
-                document.getElementById('scan-count').textContent = stats.total_scans;
-            }
-            if (stats.area_explored_m2 !== undefined) {
-                document.getElementById('area').textContent = stats.area_explored_m2.toFixed(2) + ' m²';
-            }
-            if (stats.total_distance !== undefined) {
-                document.getElementById('distance').textContent = stats.total_distance.toFixed(2) + ' mm';
-            }
-        }
-
-        function sendCommand(command, params = {}) {
+        function sendCmd(cmd, params = {}) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ command, ...params }));
+                ws.send(JSON.stringify({ command: cmd, ...params }));
             }
         }
 
-        document.getElementById('btn-start').addEventListener('click', () => {
-            sendCommand('start_exploration');
+        function connect() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                log('Connected', 'success');
+                sendCmd('list_maps');
+            };
+
+            ws.onclose = () => log('Disconnected', 'warning');
+
+            ws.onerror = (e) => log('WebSocket error', 'error');
+
+            ws.onmessage = (event) => {
+                const d = JSON.parse(event.data);
+
+                switch (d.type) {
+                    case 'connected':
+                        document.getElementById('robot-status').textContent = d.simulation_mode ? 'Simulation' : 'Connected';
+                        document.getElementById('robot-status').className = d.simulation_mode ? 'status-simulation' : 'status-connected';
+                        document.getElementById('lidar-status').textContent = d.lidar_connected ? 'Connected' : 'Disconnected';
+                        document.getElementById('lidar-status').className = d.lidar_connected ? 'status-connected' : 'status-disconnected';
+                        robotPose = d.robot_pose || { x: 0, y: 0, yaw: 0 };
+                        break;
+
+                    case 'map_update':
+                        if (d.scan_points) currentPoints = d.scan_points;
+                        if (d.map) {
+                            const m = d.map;
+                            gridWidth = m.width;
+                            gridHeight = m.height;
+                            gridResolution = m.resolution;
+                            if (m.grid_b64) {
+                                const bytes = Uint8Array.from(atob(m.grid_b64), c => c.charCodeAt(0));
+                                occupancyGrid = Array.from(bytes);
+                            } else if (m.grid) {
+                                occupancyGrid = m.grid.flat();
+                            }
+                        }
+                        robotPose = d.robot_pose || robotPose;
+                        document.getElementById('scan-source').textContent = d.scan_source || '-';
+                        draw();
+                        break;
+
+                    case 'map_list':
+                        const select = document.getElementById('map-select');
+                        select.innerHTML = '<option value="default">Default Room</option>';
+                        d.maps.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = m.name;
+                            opt.textContent = m.name + (m.description ? ` - ${m.description}` : '');
+                            select.appendChild(opt);
+                        });
+                        log(`Loaded ${d.maps.length} maps`);
+                        break;
+
+                    case 'map_loaded':
+                        log(`Map loaded: ${d.map_name}`, 'success');
+                        break;
+
+                    case 'scan_complete':
+                        scanCount++;
+                        document.getElementById('scan-count').textContent = scanCount;
+                        break;
+
+                    case 'path_planned':
+                        currentPath = d.path;
+                        draw();
+                        break;
+
+                    case 'robot_moved':
+                        robotPose = d.pose;
+                        document.getElementById('robot-x').textContent = robotPose.x.toFixed(0);
+                        document.getElementById('robot-y').textContent = robotPose.y.toFixed(0);
+                        document.getElementById('robot-yaw').textContent = (robotPose.yaw * 180 / Math.PI).toFixed(1);
+                        draw();
+                        break;
+
+                    case 'exploration_started':
+                        exploring = true;
+                        document.getElementById('explore-status').textContent = 'Running';
+                        document.getElementById('explore-status').className = 'text-green-400';
+                        document.getElementById('btn-explore').textContent = '⏹ Stop';
+                        document.getElementById('btn-explore').className = 'w-full px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-semibold';
+                        log('Exploration started', 'success');
+                        break;
+
+                    case 'exploration_stopped':
+                    case 'exploration_completed':
+                        exploring = false;
+                        document.getElementById('explore-status').textContent = d.type === 'exploration_completed' ? 'Completed' : 'Stopped';
+                        document.getElementById('explore-status').className = 'text-yellow-400';
+                        document.getElementById('btn-explore').textContent = '▶ Start Exploration';
+                        document.getElementById('btn-explore').className = 'w-full px-3 py-2 bg-green-600 hover:bg-green-500 rounded text-sm font-semibold';
+                        break;
+
+                    case 'reset_complete':
+                        currentPoints = [];
+                        occupancyGrid = null;
+                        currentPath = [];
+                        scanCount = 0;
+                        document.getElementById('scan-count').textContent = '0';
+                        robotPose = d.pose || { x: 0, y: 0, yaw: 0 };
+                        draw();
+                        break;
+
+                    case 'error':
+                        log(d.message, 'error');
+                        break;
+                }
+            };
+        }
+
+        // Controls
+        ['forward', 'backward', 'left', 'right'].forEach(dir => {
+            const btn = document.getElementById(`btn-${dir}`);
+            btn.addEventListener('mousedown', () => {
+                sendCmd('manual_move', { action: dir });
+                moveInterval = setInterval(() => sendCmd('manual_move', { action: dir }), 200);
+            });
+            btn.addEventListener('mouseup', () => clearInterval(moveInterval));
+            btn.addEventListener('mouseleave', () => clearInterval(moveInterval));
         });
 
         document.getElementById('btn-stop').addEventListener('click', () => {
-            sendCommand('stop_exploration');
+            clearInterval(moveInterval);
+            sendCmd('manual_move', { action: 'stop' });
         });
 
+        document.getElementById('btn-scan').addEventListener('click', () => sendCmd('scan'));
+        document.getElementById('btn-explore').addEventListener('click', () => sendCmd(exploring ? 'stop_exploration' : 'start_exploration'));
         document.getElementById('btn-reset').addEventListener('click', () => {
-            sendCommand('reset');
+            currentPoints = [];
+            currentPath = [];
+            scanCount = 0;
+            sendCmd('reset');
+        });
+        document.getElementById('btn-load-map').addEventListener('click', () => sendCmd('load_map', { map_name: document.getElementById('map-select').value }));
+        document.getElementById('btn-set-pose').addEventListener('click', () => {
+            const x = parseFloat(document.getElementById('cal-x').value) || 0;
+            const y = parseFloat(document.getElementById('cal-y').value) || 0;
+            const yaw = parseFloat(document.getElementById('cal-yaw').value) || 0;
+            sendCmd('calibrate_position', { x, y, yaw: yaw * Math.PI / 180 });
+        });
+        document.getElementById('btn-reset-pose').addEventListener('click', () => {
+            document.getElementById('cal-x').value = 0;
+            document.getElementById('cal-y').value = 0;
+            document.getElementById('cal-yaw').value = 0;
+            sendCmd('calibrate_position', { x: 0, y: 0, yaw: 0 });
         });
 
-        document.getElementById('btn-scan').addEventListener('click', () => {
-            sendCommand('manual_scan');
+        // Checkboxes
+        ['show-lines', 'show-path', 'show-grid'].forEach(id => {
+            document.getElementById(id).addEventListener('change', draw);
         });
-
-        document.getElementById('btn-save').addEventListener('click', () => {
-            const name = 'map_' + Date.now();
-            sendCommand('save_map', { map_name: name });
-        });
-
-        document.getElementById('btn-forward').addEventListener('mousedown', () => {
-            manualMoveInterval = setInterval(() => sendCommand('manual_move', { linear_x: 100, angular_z: 0 }), 100);
-        });
-
-        document.getElementById('btn-backward').addEventListener('mousedown', () => {
-            manualMoveInterval = setInterval(() => sendCommand('manual_move', { linear_x: -100, angular_z: 0 }), 100);
-        });
-
-        document.getElementById('btn-left').addEventListener('mousedown', () => {
-            manualMoveInterval = setInterval(() => sendCommand('manual_move', { linear_x: 0, angular_z: 30 }), 100);
-        });
-
-        document.getElementById('btn-right').addEventListener('mousedown', () => {
-            manualMoveInterval = setInterval(() => sendCommand('manual_move', { linear_x: 0, angular_z: -30 }), 100);
-        });
-
-        ['btn-forward', 'btn-backward', 'btn-left', 'btn-right'].forEach(id => {
-            document.getElementById(id).addEventListener('mouseup', () => {
-                clearInterval(manualMoveInterval);
-            });
-            document.getElementById(id).addEventListener('mouseleave', () => {
-                clearInterval(manualMoveInterval);
-            });
-        });
-
-        document.getElementById('btn-stop-move').addEventListener('click', () => {
-            clearInterval(manualMoveInterval);
-            sendCommand('manual_move', { linear_x: 0, angular_z: 0 });
-        });
-
-        document.getElementById('show-path').addEventListener('change', renderMap);
-        document.getElementById('show-frontiers').addEventListener('change', renderMap);
 
         connect();
     </script>

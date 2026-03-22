@@ -1,0 +1,20 @@
+{
+  "name": "room_with_obstacles",
+  "description": "Room with furniture obstacles",
+  "walls": [
+    {"angle_start": 0, "angle_end": 45, "distance": 2500},
+    {"angle_start": 45, "angle_end": 90, "distance": 3000},
+    {"angle_start": 90, "angle_end": 135, "distance": 2500},
+    {"angle_start": 135, "angle_end": 180, "distance": 3500},
+    {"angle_start": 180, "angle_end": 225, "distance": 3000},
+    {"angle_start": 225, "angle_end": 270, "distance": 2800},
+    {"angle_start": 270, "angle_end": 315, "distance": 3200},
+    {"angle_start": 315, "angle_end": 360, "distance": 2500}
+  ],
+  "obstacles": [
+    {"angle": 30, "width": 15, "distance": 1200},
+    {"angle": 90, "width": 20, "distance": 1500},
+    {"angle": 180, "width": 25, "distance": 1800},
+    {"angle": 270, "width": 15, "distance": 1400}
+  ]
+}

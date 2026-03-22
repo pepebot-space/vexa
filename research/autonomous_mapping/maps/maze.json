@@ -1,0 +1,22 @@
+{
+  "name": "maze",
+  "description": "Maze-like environment",
+  "walls": [
+    {"angle_start": 0, "angle_end": 60, "distance": 3000},
+    {"angle_start": 60, "angle_end": 120, "distance": 2000},
+    {"angle_start": 120, "angle_end": 180, "distance": 3500},
+    {"angle_start": 180, "angle_end": 240, "distance": 2500},
+    {"angle_start": 240, "angle_end": 300, "distance": 4000},
+    {"angle_start": 300, "angle_end": 360, "distance": 2800}
+  ],
+  "obstacles": [
+    {"angle": 20, "width": 10, "distance": 1000},
+    {"angle": 45, "width": 15, "distance": 1500},
+    {"angle": 90, "width": 20, "distance": 800},
+    {"angle": 135, "width": 10, "distance": 1800},
+    {"angle": 180, "width": 25, "distance": 1200},
+    {"angle": 225, "width": 15, "distance": 2000},
+    {"angle": 270, "width": 10, "distance": 1400},
+    {"angle": 315, "width": 20, "distance": 1600}
+  ]
+}

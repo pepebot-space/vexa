@@ -7,6 +7,7 @@ Creates 2D occupancy grid map from LiDAR scans for autonomous navigation.
 
 import numpy as np
 import math
+import base64
 from typing import List, Tuple, Optional
 from dataclasses import dataclass, field
 
@@ -26,7 +27,7 @@ class OccupancyMap:
     UNKNOWN = -1
 
     LOG_ODDS_OCCUPIED = 0.9
-    LOG_ODDS_FREE = 0.4
+    LOG_ODDS_FREE = -0.4
 
     def __post_init__(self):
         if self.grid is None:
@@ -117,9 +118,12 @@ class OccupancyMap:
         self._update_grid_from_log_odds()
 
     def _update_grid_from_log_odds(self):
-        prob = 1.0 / (1.0 + np.exp(-self.log_odds))
+        # Clip log_odds to prevent overflow in exp
+        clipped_log_odds = np.clip(self.log_odds, -20, 20)
+        prob = 1.0 / (1.0 + np.exp(-clipped_log_odds))
         self.grid = (prob * 100).astype(np.float32)
-        self.grid[self.log_odds == 0] = self.UNKNOWN
+        # Unknown cells: log_odds == 0 and never updated
+        self.grid[(self.log_odds == 0)] = self.UNKNOWN
 
     def get_probability(self, gx: int, gy: int) -> float:
         if not self.is_valid(gx, gy):
@@ -208,7 +212,20 @@ class OccupancyMap:
 
         return self.grid_to_world(int(center_gx), int(center_gy))
 
-    def to_dict(self) -> dict:
+    def to_dict(self, compress: bool = True) -> dict:
+        grid_data = self.grid.astype(np.int8)
+        if compress:
+            grid_bytes = grid_data.tobytes()
+            grid_b64 = base64.b64encode(grid_bytes).decode("ascii")
+            return {
+                "resolution": self.resolution,
+                "width": self.width,
+                "height": self.height,
+                "origin_x": self.origin_x,
+                "origin_y": self.origin_y,
+                "grid_b64": grid_b64,
+                "compressed": True,
+            }
         return {
             "resolution": self.resolution,
             "width": self.width,
@@ -220,13 +237,21 @@ class OccupancyMap:
 
     @classmethod
     def from_dict(cls, data: dict) -> "OccupancyMap":
+        if data.get("compressed"):
+            grid_bytes = base64.b64decode(data["grid_b64"])
+            grid = np.frombuffer(grid_bytes, dtype=np.int8).reshape(
+                data["height"], data["width"]
+            )
+            grid = grid.astype(np.float32)
+        else:
+            grid = np.array(data["grid"], dtype=np.float32)
         return cls(
             resolution=data["resolution"],
             width=data["width"],
             height=data["height"],
             origin_x=data["origin_x"],
             origin_y=data["origin_y"],
-            grid=np.array(data["grid"], dtype=np.float32),
+            grid=grid,
             log_odds=np.zeros((data["height"], data["width"]), dtype=np.float32),
         )
 

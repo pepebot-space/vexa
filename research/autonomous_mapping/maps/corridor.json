@@ -1,0 +1,9 @@
+{
+  "name": "corridor",
+  "description": "Long narrow corridor",
+  "walls": [
+    {"angle_start": 0, "angle_end": 180, "distance": 4000},
+    {"angle_start": 180, "angle_end": 360, "distance": 1500}
+  ],
+  "obstacles": []
+}

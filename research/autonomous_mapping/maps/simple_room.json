@@ -1,0 +1,11 @@
+{
+  "name": "simple_room",
+  "description": "Simple rectangular room",
+  "walls": [
+    {"angle_start": 0, "angle_end": 90, "distance": 3000},
+    {"angle_start": 90, "angle_end": 180, "distance": 3000},
+    {"angle_start": 180, "angle_end": 270, "distance": 3000},
+    {"angle_start": 270, "angle_end": 360, "distance": 3000}
+  ],
+  "obstacles": []
+}

@@ -1,0 +1,16 @@
+{
+  "name": "large_room",
+  "description": "Large open room",
+  "walls": [
+    {"angle_start": 0, "angle_end": 90, "distance": 5000},
+    {"angle_start": 90, "angle_end": 180, "distance": 5000},
+    {"angle_start": 180, "angle_end": 270, "distance": 5000},
+    {"angle_start": 270, "angle_end": 360, "distance": 5000}
+  ],
+  "obstacles": [
+    {"angle": 45, "width": 20, "distance": 2000},
+    {"angle": 135, "width": 20, "distance": 2500},
+    {"angle": 225, "width": 20, "distance": 1500},
+    {"angle": 315, "width": 20, "distance": 1800}
+  ]
+}
