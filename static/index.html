@@ -329,6 +329,21 @@
                         ontouchstart="startDpad('backward')" ontouchend="stopDpad()"
                         class="w-10 h-10 bg-[#111] border border-[#333] hover:border-vexa-accent text-vexa-textSecondary hover:text-vexa-accent rounded text-lg transition-colors select-none">↓</button>
                 </div>
+                <!-- Row 4: Duration setting -->
+                <div class="mt-2 w-full px-1">
+                    <div class="text-[9px] text-vexa-textSecondary uppercase tracking-widest mb-1 flex justify-between items-center">
+                        <span>Duration</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="valDpadDuration" value="500" min="100" max="5000" step="100"
+                                class="bg-transparent text-white w-14 text-right outline-none border-b border-gray-600 focus:border-vexa-accent p-0 tabular-nums text-[9px]"
+                                onchange="updateDpadDurationFromInput()">
+                            <span class="text-[9px] text-vexa-textSecondary">ms</span>
+                        </div>
+                    </div>
+                    <input type="range" id="dpadDurationSlider" min="100" max="5000" step="100" value="500"
+                        class="w-full accent-vexa-textPrimary h-1 bg-gray-800 outline-none"
+                        oninput="updateDpadDurationFromSlider()" onchange="saveMotionConfig()">
+                </div>
             </div>
             
         </div>
@@ -660,13 +675,32 @@
         if (!isDpadMode) stopDpadNow(); // stop any lingering command
     }
 
+    function getDpadDuration() {
+        return parseInt(document.getElementById('dpadDurationSlider').value, 10) || 500;
+    }
+
+    function updateDpadDurationFromSlider() {
+        document.getElementById('valDpadDuration').value = document.getElementById('dpadDurationSlider').value;
+    }
+
+    function updateDpadDurationFromInput() {
+        let val = parseInt(document.getElementById('valDpadDuration').value, 10);
+        if (isNaN(val)) val = 500;
+        if (val < 100) val = 100;
+        if (val > 5000) val = 5000;
+        document.getElementById('dpadDurationSlider').value = val;
+        document.getElementById('valDpadDuration').value = val;
+        saveMotionConfig();
+    }
+
     function startDpad(direction) {
         if (!isConnected) return;
-        api('/move', 'POST', { action: direction }).catch(()=>{});
-        // Keep sending while held
+        const dur = getDpadDuration();
+        api('/move', 'POST', { action: direction, duration: dur / 1000 }).catch(()=>{});
+        // Keep sending while held, using duration as repeat interval
         dpadHoldTimer = setInterval(() => {
-            if (isConnected) api('/move', 'POST', { action: direction }).catch(()=>{});
-        }, 300);
+            if (isConnected) api('/move', 'POST', { action: direction, duration: dur / 1000 }).catch(()=>{});
+        }, dur);
     }
 
     function stopDpad() {
@@ -697,6 +731,10 @@
                 document.getElementById('powerXSlider').value = config.x_max;
                 document.getElementById('valX').value = config.x_max;
             }
+            if (config.dpad_duration !== undefined) {
+                document.getElementById('dpadDurationSlider').value = config.dpad_duration;
+                document.getElementById('valDpadDuration').value = config.dpad_duration;
+            }
         } catch(e) { console.error('Failed to load motion config:', e); }
     }
 
@@ -704,7 +742,8 @@
         try {
             const y = parseInt(document.getElementById('powerYSlider').value, 10);
             const x = parseInt(document.getElementById('powerXSlider').value, 10);
-            await api('/config/motion', 'POST', { y_max: y, x_max: x });
+            const dpadDur = parseInt(document.getElementById('dpadDurationSlider').value, 10);
+            await api('/config/motion', 'POST', { y_max: y, x_max: x, dpad_duration: dpadDur });
         } catch(e) { console.error('Failed to save motion config:', e); }
     }
 

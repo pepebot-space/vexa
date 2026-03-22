@@ -375,17 +375,21 @@ async def api_agent_status():
 class MotionConfigRequest(BaseModel):
     y_max: int
     x_max: int
+    dpad_duration: Optional[int] = 500
 
 @app.get("/api/config/motion")
 async def get_motion_config():
     y_val = await asyncio.to_thread(database.get_setting, "motion_y_max", "12000")
     x_val = await asyncio.to_thread(database.get_setting, "motion_x_max", "8000")
-    return {"y_max": int(y_val), "x_max": int(x_val)}
+    dur_val = await asyncio.to_thread(database.get_setting, "dpad_duration", "500")
+    return {"y_max": int(y_val), "x_max": int(x_val), "dpad_duration": int(dur_val)}
 
 @app.post("/api/config/motion")
 async def set_motion_config(req: MotionConfigRequest):
     await asyncio.to_thread(database.set_setting, "motion_y_max", str(req.y_max))
     await asyncio.to_thread(database.set_setting, "motion_x_max", str(req.x_max))
+    if req.dpad_duration is not None:
+        await asyncio.to_thread(database.set_setting, "dpad_duration", str(req.dpad_duration))
     return JSONResponse(content={"status": "success"})
 
 
