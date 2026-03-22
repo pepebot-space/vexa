@@ -5,7 +5,7 @@ description = "VEXA Control Panel and Agent Integration for MiniRobot"
 authors = ["Anak10thn <anak10thn@example.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.9,<3.15"
 fastapi = "^0.110.0"
 uvicorn = "^0.27.0"
 pydantic = "^2.6.0"
